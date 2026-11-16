@@ -49,18 +49,18 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           
-          $parentTag = "v2.5.1"
+          $parentTag = "v2.3.2"
           
           try {
             
             $json = curl.exe -fsSL "https://getbifrost.ai/latest-release" 2>$null
             
-            if ($LASTEXITCODE -ne 0) { $parentTag = "v2.5.1" }
+            if ($LASTEXITCODE -ne 0) { $parentTag = "v2.3.2" }
 
             $release = $json | ConvertFrom-Json
-            $parentTag = if ($release.name) { $release.name } else { "v2.5.1" }
+            $parentTag = if ($release.name) { $release.name } else { "v2.3.2" }
           } catch {
-            $parentTag = "v2.5.1"
+            $parentTag = "v2.3.2"
           }
 
 

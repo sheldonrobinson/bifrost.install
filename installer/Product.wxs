@@ -401,7 +401,7 @@
 				             Action="create"/>
 						<?endif ?>
 			</Component>
-			<Component Id="SetBifrostAppEnvironmentVariables"
+			<Component Id="SetEnvironmentVariables"
 			           Guid="C45DDCE2-5EB8-4327-8DC6-CC1888547395">
 					   <?if $(BuildType) = "Machine" ?>
 				<Environment Id="BifrostAppDir"
