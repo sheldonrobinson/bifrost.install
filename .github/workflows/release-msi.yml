@@ -110,5 +110,5 @@ jobs:
         run: |
           $assets = Get-ChildItem -Recurse installer/output -Filter *.msi | ForEach-Object { $_.FullName }
           gh release create "v$env:VERSION" $assets `
-            --title "AgentGateway $env:VERSION" `
-            --notes "Automated release tracking parent agentgateway/agentgateway v$($env:VERSION -replace '\.0$','')."
+            --title "Bifrost $env:VERSION" `
+            --notes "Automated release tracking parent maximhq/bifrost v$($env:VERSION -replace '\.0$','')."
