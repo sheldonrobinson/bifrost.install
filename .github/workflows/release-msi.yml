@@ -35,6 +35,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install jq
+        uses: dcarbone/install-jq-action@v4
+        with:
+          version: '1.8.2'  # specify the jq version you need
+          force: true        # optional, installs even if jq is pre-installed
+
       - name: Compare parent release with current version
         id: check
         shell: pwsh
@@ -42,8 +48,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
+          
+          $parentTag = "v2.5.1"
+          
+          try {
+            
+            $json = curl.exe -fsSL "https://getbifrost.ai/latest-release" 2>$null
+            
+            if ($LASTEXITCODE -ne 0) { $parentTag = "v2.5.1" }
 
-          $parentTag = ( Invoke-RestMethod -Uri "https://getbifrost.ai/latest-release" -ErrorAction Stop ).name
+            $release = $json | ConvertFrom-Json
+            $parentTag = if ($release.name) { $release.name } else { "v2.5.1" }
+          } catch {
+            $parentTag = "v2.5.1"
+          }
+
+
+          $parentTag = (curl.exe -fsSL "https://getbifrost.ai/latest-release" 2>$null | jq -r '.name // "latest"' 2>$null)
 
           $parentVer   = $parentTag.TrimStart('v')
           $current     = (Get-Content installer/version.txt -Raw).Trim()
