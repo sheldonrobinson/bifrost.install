@@ -1,0 +1,429 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+	<Package Name="bifrost"
+	         Language="1033"
+	         Version="$(ProductVersion)"
+	         Manufacturer="Konnek Inc"
+	         UpgradeCode="9349F052-8927-4869-A28D-9D5A48C882F3"
+	         Scope="$(Scope)"
+	         InstallerVersion="500"
+	         Compressed="yes">
+		<MediaTemplate EmbedCab="yes"
+		               CompressionLevel="high"/>
+		<Property Id="SILENT"
+		          Value="0"/>
+		<Property Id="ARPPRODUCTICON"
+		          Value="bifrostIcon"/>
+		<Property Id="ARPHELPLINK"
+		          Value="https://docs.getbifrost.ai"/>
+		<Property Id="ARPURLINFOABOUT"
+		          Value="https://github.com/maximhq/bifrost"/>
+		<Property Id="WIXUI_INSTALLDIR"
+		          Value="INSTALLFOLDER"/>
+		<Property Id="INSTALLFOLDER"
+		          Secure="yes">
+		<?if $(var.BuildType) = "Machine" ?>
+			<RegistrySearch Id="InstallFolderSearch"
+			                Root="HKLM"
+			                Key="SOFTWARE\Konnek\bifrost"
+			                Name="InstallPath"
+			                Type="raw"/>
+		<?else ?>
+			<RegistrySearch Id="InstallFolderSearch"
+			                Root="HKLM"
+			                Key="SOFTWARE\Konnek\bifrost"
+			                Name="InstallPath"
+			                Type="raw"/>
+		<?endif ?>
+		</Property>
+		<!-- ================================================================
+         Upgrade logic
+           - MajorUpgrade handles removal of the old MSI before
+             new files are placed (Schedule=afterInstallInitialize).
+           - AllowSameVersionUpgrades=no blocks same-version reinstalls.
+           - Downgrades are blocked with a user-facing error.
+        ================================================================ -->
+		<MajorUpgrade DowngradeErrorMessage="A newer version of bifrost is already installed. Setup will now exit."
+		              Schedule="afterInstallInitialize"
+		              AllowSameVersionUpgrades="no"/>
+		<!-- ================================================================
+         Features
+        ================================================================ -->
+		<Feature Id="ProductFeature"
+		         Title="bifrost"
+		         Description="Installs bifrost and all required components."
+		         Level="1"
+		         ConfigurableDirectory="INSTALLFOLDER">
+			<ComponentGroupRef Id="ProductComponents"/>
+			<ComponentGroupRef Id="StartMenuComponents"/>
+			<ComponentGroupRef Id="ConfigComponents"/>
+		</Feature>
+		<!-- ================================================================
+         UI
+         When built with -dSILENT=1 (build.ps1 -Silent), WixUI_Minimal
+         is used so no dialogs appear. Otherwise the custom three-step
+         bifrostUI sequence is shown.
+        ================================================================ -->
+		<!-- Use ui:WixUI instead of UIRef -->
+		<ui:WixUI Id="WixUI_Minimal"/>
+		<WixVariable Id="WixUILicenseRtf"
+		             Value="$(LicenseFile)"/>
+		<WixVariable Id="WixUIBannerBmp"
+		             Value="$(BitmapDir)\banner.bmp"/>
+		<WixVariable Id="WixUIDialogBmp"
+		             Value="$(BitmapDir)\dialog.bmp"/>
+	<?if $(BuildType) = "PowerUser" ?>
+		<!-- Per-user scheduled task -->
+		<CustomAction Id="bifrostTask_Create_PU"
+		              Directory="System64Folder"
+		              ExeCommand='schtasks.exe /Create /F /TN "Bifrost AI Gateway" /TR "[INSTALLFOLDER]bifrost-http.exe" /SC ONLOGON'
+		              Execute="deferred"
+		              Return="check"
+		              Impersonate="yes"/>
+		<CustomAction Id="bifrostTask_Remove_PU"
+		              Directory="System64Folder"
+		              ExeCommand='schtasks.exe /Delete /F /TN "Bifrost AI Gateway"'
+		              Execute="deferred"
+		              Return="ignore"
+		              Impersonate="yes"/>
+		<InstallExecuteSequence>
+			<Custom Action="bifrostTask_Create_PU"
+			        After="InstallFiles"
+			        Condition="NOT Installed OR REINSTALL"/>
+			<Custom Action="bifrostTask_Remove_PU"
+			        Before="RemoveFiles"
+			        Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE"/>
+		</InstallExecuteSequence>
+	<?endif ?>
+	</Package>
+	<Fragment>
+	<?if $(BuildType) = "Machine" ?>
+		<!-- %PROGRAMFILES%\ -->
+		<Directory Id="ProgramFiles64Folder">
+			<Directory Id="KonnekFolder"
+			           Name="Konnek">
+				<Directory Id="INSTALLFOLDER"
+				           Name="bifrost"/>
+			</Directory>
+		</Directory>
+		<!-- %PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs\ -->
+		<Directory Id="ProgramMenuFolder">
+			<Directory Id="KonnekStartMenuDir"
+			           Name="Konnek"/>
+		</Directory>
+		<!-- %PROGRAMDATA%\Konnek\bifrost\ – config file for the installing user -->
+		<Directory Id="CommonAppDataFolder">
+            <Directory Id="AppDataKonnek"
+			           Name="Konnek">
+				<Directory Id="AppDataBifrost"
+				           Name="bifrost"/>
+            </Directory>
+		</Directory>
+	<?else?>
+		<!-- %LOCALAPPDATA%\Programs\ -->
+		<Directory Id="LocalAppDataFolder">
+			<Directory Id="LocalPrograms"
+			           Name="Programs">
+				<Directory Id="KonnekFolder"
+				           Name="Konnek">
+					<Directory Id="INSTALLFOLDER"
+					           Name="bifrost"/>
+				</Directory>
+			</Directory>
+		</Directory>
+		<!-- Per-user Start Menu: %APPDATA%\Microsoft\Windows\Start Menu\Programs\ -->
+		<Directory Id="AppDataFolder">
+			<!-- existing – Start Menu -->
+			<Directory Id="AppDataMicrosoft"
+			           Name="Microsoft">
+				<Directory Id="AppDataWindows"
+				           Name="Windows">
+					<Directory Id="AppDataStartMenu"
+					           Name="Start Menu">
+						<Directory Id="AppDataPrograms"
+						           Name="Programs">
+							<Directory Id="KonnekStartMenuDir"
+							           Name="Konnek"/>
+                            <Directory Id="StartProgramsDir"
+							           Name="Startup"/>
+						</Directory>
+					</Directory>
+				</Directory>
+			</Directory>
+			<!-- ADD – %APPDATA%\Konnek\bifrost\ for config file -->
+			<Directory Id="AppDataKonnek"
+			           Name="Konnek">
+				<Directory Id="AppDataBifrost"
+				           Name="bifrost"/>
+			</Directory>
+		</Directory>
+	<?endif?>
+	</Fragment>
+	<!-- ================================================================
+       Directory tree  (structure defined in Directory.wxi)
+     ================================================================ -->
+	<!-- ── Main application files ──────────────────────────────────── -->
+	<!-- APP icon -->
+	<Fragment>
+		<Icon Id="bifrostIcon"
+		      SourceFile="$(IconDir)\bifrost.ico"/>
+		<Icon Id="HelpIcon"
+		      SourceFile="$(IconDir)\help.ico"/>
+		<Icon Id="InfoIcon"
+		      SourceFile="$(IconDir)\info.ico"/>
+		<Icon Id="StartIcon"
+		      SourceFile="$(IconDir)\start.ico"/>
+		<Icon Id="StopIcon"
+		      SourceFile="$(IconDir)\stop.ico"/>
+		<Icon Id="SysCtlIcon"
+		      SourceFile="$(IconDir)\sysctl.ico"/>
+		<Icon Id="UninstallIcon"
+		      SourceFile="$(IconDir)\uninstall.ico"/>
+		<Icon Id="UserIcon"
+		      SourceFile="$(IconDir)\user.ico"/>
+	</Fragment>
+	<Fragment>
+		<DirectoryRef Id="INSTALLFOLDER">
+			<Component Id="bifrostExe"
+			           Guid="6FBF8357-DD25-47E9-B13F-9493363F4A96">
+				<File Id="bifrost_http_exe"
+				      Name="bifrost-http.exe"
+				      Source="$(SourceDir)\bifrost-http.exe"
+				      KeyPath="yes"
+				      Checksum="yes"/>
+                <File Id="bifrost_exe"
+				      Name="bifrost.exe"
+					  Source="$(SourceDir)\bifrost.exe"
+				      Checksum="yes"/>
+			</Component>
+			<Component Id="RegistryEntry"
+			           Guid="4B898859-02DB-4D28-8E4F-0453FF6F35C8">
+				<?if $(BuildType) = "System" ?>
+				<RegistryKey Root="HKLM"
+				             Key="SOFTWARE\Konnek\bifrost"
+				             ForceDeleteOnUninstall="yes">
+					<RegistryValue Name="InstallPath"
+					               Type="string"
+					               Value="[INSTALLFOLDER]"
+					               KeyPath="yes"/>
+					<RegistryValue Name="Version"
+					               Type="string"
+					               Value="$(ProductVersion)"/>
+				</RegistryKey>
+				<?else ?>
+				<RegistryKey Root="HKCU"
+				             Key="SOFTWARE\Konnek\bifrost"
+				             ForceDeleteOnUninstall="yes">
+					<RegistryValue Name="InstallPath"
+					               Type="string"
+					               Value="[INSTALLFOLDER]"
+					               KeyPath="yes"/>
+					<RegistryValue Name="Version"
+					               Type="string"
+					               Value="$(ProductVersion)"/>
+				</RegistryKey>
+			<?endif ?>
+			</Component>
+			<?if $(BuildType) = "System" ?>
+			<Component Id="bifrostService"
+			           Guid="77105B41-AC28-47B3-9A40-48CAF533D9AE">
+				<!-- Install the service -->
+				<ServiceInstall Id="bifrostServiceInstaller"
+				                Name="bifrost"
+				                DisplayName="bifrost Background Service"
+				                Description="Runs bifrost in background mode"
+				                Type="ownProcess"
+				                Start="auto"
+				                ErrorControl="normal"
+				                Account="LocalSystem">
+					<util:ServiceConfig FirstFailureActionType="restart"
+					                    SecondFailureActionType="restart"
+					                    ThirdFailureActionType="restart"/>
+				</ServiceInstall>
+				<!-- Control service behavior during install/uninstall -->
+				<ServiceControl Id="bifrostServiceControl"
+				                Name="bifrost"
+				                Start="install"
+				                Stop="both"
+				                Remove="uninstall"
+				                Wait="yes"/>
+				<!-- Registry key for the service -->
+				<RegistryKey Root="HKLM"
+				             Key="SYSTEM\CurrentControlSet\Services\bifrost">
+					<RegistryValue Name="StartupServiceInstalled"
+					               Type="integer"
+					               Value="1"
+					               KeyPath="yes"/>
+					<RegistryValue Name="InstallPath"
+					               Type="string"
+					               Value="[INSTALLFOLDER]"/>
+					<RegistryValue Name="Version"
+					               Type="string"
+					               Value="$(ProductVersion)"/>
+				</RegistryKey>
+			</Component>
+			<?endif ?>
+		</DirectoryRef>
+	</Fragment>
+	<Fragment>
+		<ComponentGroup Id="ProductComponents">
+			<ComponentRef Id="bifrostExe"/>
+			<ComponentRef Id="RegistryEntry"/>
+			<?if $(BuildType) = "System" ?>
+			<ComponentRef Id="bifrostService"/>
+			<?endif ?>
+		</ComponentGroup>
+	</Fragment>
+	<!-- ── Start Menu shortcuts ─────────────────────────────────────── -->
+	<Fragment>
+		<DirectoryRef Id="KonnekStartMenuDir">
+			<Component Id="StartMenuShortcuts"
+			           Guid="1AD18B5A-B026-49B5-B8E4-BA1ED8E359F4">
+				<util:InternetShortcut Id="WebsiteStartMenuShortcut"
+				                       Name="Bifrost Admin UI"
+				                       Target="http://localhost:8080"
+				                       Type="url" 
+                                       IconFile="bifrostIcon"
+                                       IconIndex="0"/>
+				<?if $(BuildType) = "System" ?>
+				<!-- Start LLM Proxy startmenu shortcut -->
+				<Shortcut Id="StartServiceStartMenuShortcut"
+				          Name="Bifrost AI Gateway (Administrator)"
+				          Description="Start Bifrost AI Gateway Service"
+				          Target="[System64Folder]sc.exe start bifrost"
+				          WorkingDirectory="INSTALLFOLDER"
+						  Icon="StartIcon"
+						  IconIndex="0"/>
+				<!-- Stop LLM Proxy startmenu shortcut -->
+				<Shortcut Id="StopServiceStartMenuShortcut"
+				          Name="Stop AI Gateway (Administrator)"
+				          Description="Stop Bifrost AI Gateway Service"
+				          Target="[System64Folder]sc.exe stop bifrost"
+				          WorkingDirectory="INSTALLFOLDER"
+						  Icon="StopIcon"
+						  IconIndex="0"/>
+				<?elseif $(BuildType) = "PowerUser" ?>
+				<Shortcut Id="StartServiceStartMenuShortcut"
+				          Name="Bifrost AI Gateway"
+				          Description="Start Bifrost AI Gateway"
+				          Target="[System64Folder]schtasks.exe"
+				          Arguments="/Run /TN &quot;Bifrost AI Gateway&quot;"
+				          WorkingDirectory="INSTALLFOLDER"
+				          Icon="StartIcon"
+						  IconIndex="0"/>
+				<Shortcut Id="StopServiceStartMenuShortcut"
+				          Name="Stop AI Gateway"
+				          Description="Stop Bifrost AI Gateway"
+				          Target="[System64Folder]schtasks.exe"
+				          Arguments="/End /TN &quot;Bifrost AI Gateway&quot;"
+				          WorkingDirectory="INSTALLFOLDER"
+				          Icon="StopIcon"
+						  IconIndex="0"/>
+						  <?else ?>
+				<Shortcut Id="StartServiceStartMenuShortcut"
+				          Name="Bifrost AI Gateway"
+				          Description="Launch Bifrost AI Gateway"
+				          Target="[INSTALLFOLDER]bifrost-http.exe"
+				          WorkingDirectory="INSTALLFOLDER"
+				          Icon="bifrostIcon" 
+						  IconIndex="0" />	  
+				<?endif ?>
+				<util:InternetShortcut Id="bifrostDocsStartMenuShortcut"
+				                       Name="Bifrost Docs"
+				                       Target="https://docs.getbifrost.ai/"
+				                       Type="url" />
+				<Shortcut Id="bifrostUninstallShortcut"
+				          Name="Uninstall bifrost"
+				          Description="Remove bifrost from this computer"
+				          Target="[SystemFolder]msiexec.exe"
+				          Arguments="/x [ProductCode]"
+						  Icon="UninstallIcon"
+						  IconIndex="0"/>
+				<RemoveFolder Id="CleanUpShortCuts"
+				              Directory="KonnekStartMenuDir"
+				              On="uninstall"/>
+				<?if $(BuildType) = "Machine" ?>
+				<RegistryValue Root="HKLM"
+				               Key="SOFTWARE\Konnek\bifrost\StartMenu"
+				               Name="installed"
+				               Type="integer"
+				               Value="1"
+				               KeyPath="yes"/>
+				<?else ?>
+				<RegistryValue Root="HKCU"
+				               Key="SOFTWARE\Konnek\bifrost\StartMenu"
+				               Name="installed"
+				               Type="integer"
+				               Value="1"
+				               KeyPath="yes"/>
+				<?endif ?>
+			</Component>
+		</DirectoryRef>
+	</Fragment>
+	<Fragment>
+		<ComponentGroup Id="StartMenuComponents">
+			<ComponentRef Id="StartMenuShortcuts"/>
+		</ComponentGroup>
+	</Fragment>
+	<!-- ── Configuration component ──────────────────────────── -->
+	<Fragment>
+		<DirectoryRef Id="AppDataBifrost">
+			<Component Id="BifrostConfig"
+			           Guid="36871F2E-48BE-40CE-9DC6-76E249551D49"
+			           NeverOverwrite="yes">
+				<File Id="BifrostConfigJson"
+				      Name="config.json"
+				      Source="$(ConfigDir)\config.json"
+				      KeyPath="yes"/>
+				<RemoveFolder Id="RemoveAppDataBifrostConfig"
+				              Directory="AppDataBifrost"
+				              On="uninstall"/>
+				<RemoveFolder Id="RemoveAppDataKonnek"
+				              Directory="AppDataKonnek"
+				              On="uninstall"/>
+			</Component>
+			<Component Id="SetBifrostPortEnvironmentVariables"
+			           Guid="9B6C2F69-C07C-4658-B4CD-88CB6234270E">
+					    <?if $(BuildType) = "Machine" ?>
+				<Environment Id="BifrostPort"
+				             Name="BIFROST_PORT"
+				             Value="8080"
+				             Permanent="no"
+				             Action="create"
+				             System="yes"/>
+					   <?else ?>
+				<Environment Id="BifrostPort"
+				             Name="BIFROST_PORT"
+				             Value="8080"
+				             Permanent="no"
+				             Action="create"/>
+						<?endif ?>
+			</Component>
+			<Component Id="SetBifrostAppEnvironmentVariables"
+			           Guid="C45DDCE2-5EB8-4327-8DC6-CC1888547395">
+					   <?if $(BuildType) = "Machine" ?>
+				<Environment Id="BifrostAppDir"
+				             Name="BIFROST_APP_DIR"
+				             Value="%PROGRAMDATA%\Konnek\bifrost"
+				             Permanent="no"
+				             Action="create"
+				             System="yes"/>
+					   <?else ?>
+				<Environment Id="BifrostAppDir"
+				             Name="BIFROST_APP_DIR"
+				             Value="%APPDATA%\Konnek\bifrost"
+				             Permanent="no"
+				             Action="create"/>
+						<?endif ?>
+			</Component>
+		</DirectoryRef>
+	</Fragment>
+	<Fragment>
+		<ComponentGroup Id="ConfigComponents">
+			<ComponentRef Id="BifrostConfig"/>
+			<ComponentRef Id="SetEnvironmentVariables"/>
+		</ComponentGroup>
+	</Fragment>
+</Wix>

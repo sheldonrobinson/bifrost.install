@@ -1,0 +1,114 @@
+name: Release MSI
+
+# Checks the parent repository (agentgateway/agentgateway) for a newer release
+# and, if one exists, builds and publishes a new AgentGateway MSI release.
+#
+# Version rule: {Project-Version} = {Parent-Version}.0
+#
+# Triggers:
+#   - schedule:            weekly, Friday 6:00 PM PST  (Saturday 02:00 UTC)
+#   - workflow_dispatch:   manual run
+#   - repository_dispatch: external event ("parent-release")
+
+on:
+  schedule:
+    # Friday 6:00 PM PST == Saturday 02:00 UTC (PST is UTC-8; during PDT fires at 7 PM local)
+    - cron: '0 2 * * 6'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [parent-release]
+
+permissions:
+  contents: write
+
+env:
+  PARENT_REPO: maximhq/bifrost
+
+jobs:
+  check-upstream:
+    name: Check parent repository for updates
+    runs-on: windows-latest
+    outputs:
+      has_update: ${{ steps.check.outputs.has_update }}
+      version:    ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compare parent release with current version
+        id: check
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          try {
+            $parentTag = ( Invoke-RestMethod -Uri "https://getbifrost.ai/latest-release" -ErrorAction Stop ).name
+
+            if (:IsNullOrWhiteSpace($parentTag)) {
+                $parentTag = "latest"
+            }
+          } catch {
+            $parentTag = "latest"
+          }
+          $parentVer   = $parentTag.TrimStart('v')
+          $current     = (Get-Content installer/version.txt -Raw).Trim()
+          $currentBase = (($current -split '\.')[0..2]) -join '.'
+
+          Write-Host "Parent release : $parentTag ($parentVer)"
+          Write-Host "Current base   : $currentBase"
+
+          if ($parentVer -eq $currentBase) {
+            Write-Host "Up to date - no release needed."
+            "has_update=false" | Out-File $env:GITHUB_OUTPUT -Append
+          } else {
+            $newVersion = "$parentVer.0"          # {Parent-Version}.0
+            Write-Host "New version    : $newVersion"
+            "has_update=true"  | Out-File $env:GITHUB_OUTPUT -Append
+            "version=$newVersion" | Out-File $env:GITHUB_OUTPUT -Append
+          }
+
+  release:
+    name: Build and release MSI
+    needs: check-upstream
+    if: needs.check-upstream.outputs.has_update == 'true'
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.check-upstream.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup WiX toolset
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix
+          wix extension add WixToolset.UI.wixext
+          wix extension add WixToolset.Util.wixext
+
+      - name: Bump version.txt
+        shell: pwsh
+        run: Set-Content -Path installer/version.txt -Value "$env:VERSION" -NoNewline
+
+      - name: Build MSI
+        shell: pwsh
+        run: .\installer\build.ps1 -Variant both
+
+      - name: Commit version bump
+        shell: pwsh
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add installer/version.txt
+          git commit -m "chore(release): bump version to $env:VERSION [skip ci]"
+          git push
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $assets = Get-ChildItem -Recurse installer/output -Filter *.msi | ForEach-Object { $_.FullName }
+          gh release create "v$env:VERSION" $assets `
+            --title "AgentGateway $env:VERSION" `
+            --notes "Automated release tracking parent agentgateway/agentgateway v$($env:VERSION -replace '\.0$','')."

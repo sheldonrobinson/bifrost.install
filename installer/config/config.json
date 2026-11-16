@@ -1,0 +1,23 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "client": {
+    "allowed_origins": ["*"],
+    "enable_logging": true,
+    "log_retention_days": 365,
+    "initial_pool_size": 300
+  },
+  "config_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "./config.db"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "./logs.db"
+    }
+  }
+}
