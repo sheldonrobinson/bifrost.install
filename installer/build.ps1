@@ -141,6 +141,7 @@ function Download-Executable {
 		# Download Exe
 		Write-Host "Downloading Executable from $exeUrl ..."
 		Invoke-WebRequest -Uri $exeUrl -OutFile $outFile -UseBasicParsing
+        Write-Host "Downloading Executable from $cliUrl ..."
         Invoke-WebRequest -Uri $cliUrl -OutFile $cliFile -UseBasicParsing
 
 		Write-Host "Download complete."
@@ -235,7 +236,7 @@ $built = @()
 Download-Executable -exeUrl $downloadURL `
                     -cliUrl $downloadCliUrl `
 				    -targetFolder $SourceDir `
-				    -exeFileName "bifrost-http.exe"
+				    -exeFileName "bifrost-http.exe" `
                     -cliFileName "bifrost.exe"
 
 if (-not (Test-Path $SourceDir)) {
